@@ -1,5 +1,6 @@
 // Deterministic Node entrypoint: validate first, stage complete output, publish only after dossier builds.
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boardIssue, buildRadar, dataScript, parseSnapshot } from './lib/model.ts';
@@ -69,7 +70,13 @@ function run() {
   if (shots.length < 3 || shots.length > 4 || shots.some(f => !/\.(png|jpe?g)$/i.test(f) || f.includes('/'))) {
     fail('Screenshots require three or four top-level PNG/JPEG images');
   }
-  const stage = join(dirname(output), '.' + basename(output) + '-radar-stage');
+ let stageParent = dirname(output);
+ try {
+  accessSync(stageParent, constants.W_OK);
+ } catch {
+  stageParent = tmpdir();
+ }
+ const stage = join(stageParent, '.' + basename(output) + '-radar-stage');
   if (existsSync(stage)) fail(`Staging directory already exists: ${stage}`);
   mkdirSync(stage, { recursive: true });
   try {
@@ -83,7 +90,13 @@ function run() {
     // Replace only owned artifacts; retain unrelated files in a caller-supplied output directory.
     for (const name of ['board.json', 'data.js', 'dashboard', 'screenshots', 'dossier.json']) {
       rmSync(join(output, name), { recursive: true, force: true });
-      renameSync(join(stage, name), join(output, name));
+      try {
+       renameSync(join(stage, name), join(output, name));
+      } catch (error) {
+       if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+       cpSync(join(stage, name), join(output, name), { recursive: true, force: true });
+       rmSync(join(stage, name), { recursive: true, force: true });
+      }
     }
   } finally {
     rmSync(stage, { recursive: true, force: true });
