@@ -1,0 +1,7 @@
+{
+  "name": "token-radar-entry",
+  "private": true,
+  "type": "module",
+  "description": "Token Radar: pre-token protocol board ranked by an implied market-cap proxy",
+  "license": "MIT"
+}
