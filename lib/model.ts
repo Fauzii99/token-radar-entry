@@ -586,12 +586,12 @@ function confidenceOf(categoryPeers: number, band: { p10: number; p90: number })
 
 /** A one-line value tag for the table: which part of the stack drove the number. */
 function valueTagOf(pred: Prediction, p: SnapshotProtocol): string {
-  if (Math.abs(pred.growth_tilt) > 0.03) return pred.growth_tilt > 0 ? 'growing TVL' : 'falling TVL';
+  if (Math.abs(pred.growth_tilt) > 0.03) return pred.growth_tilt > 0 ? 'TVL up' : 'TVL down';
   if (p.tvl_usd >= 1_000_000_000) return 'large TVL';
   if (p.tvl_usd < 25_000_000) return 'small TVL';
-  if (pred.offset > 0.5) return 'strong category';
-  if (pred.offset < -0.5) return 'weak category';
-  return 'middle of the curve';
+  if (pred.offset > 0.5) return 'cat. strong';
+  if (pred.offset < -0.5) return 'cat. weak';
+  return 'on curve';
 }
 
 /** The whole board: fit, then score every kept protocol, rank by the proxy, slug breaks ties. */
@@ -694,6 +694,10 @@ export interface RadarData {
   validation: Omit<Validation, 'folds'> & { folds: { slug: string; predicted_usd: number; actual_usd: number }[] };
   rows: BoardRow[];
   excluded_watchlist: string[];
+  /** Observed peers as scatter material: TVL against market cap, the only rows where both are seen. */
+  peer_points: { slug: string; name: string; category: string | null; tvl_usd: number; mcap_usd: number }[];
+  /** The pooled core line the scatter draws, and the shrinkage weight, so the page can restate the fit. */
+  fit: { intercept: number; slope: number; n: number; shrink_k: number };
 }
 
 export function buildRadar(snapshot: Snapshot): { build: BoardBuild; radar: RadarData } {
@@ -737,6 +741,8 @@ export function buildRadar(snapshot: Snapshot): { build: BoardBuild; radar: Rada
     },
     rows,
     excluded_watchlist: universe.watchlist_off_board,
+    peer_points: peersOf(snapshot).map((p) => ({ slug: p.slug, name: p.name, category: p.category, tvl_usd: p.tvl_usd, mcap_usd: p.mcap_usd as number })),
+    fit: { intercept: build.model.core.intercept, slope: build.model.core.slope, n: build.model.peers, shrink_k: SHRINK_K },
   };
   return { build, radar };
 }
