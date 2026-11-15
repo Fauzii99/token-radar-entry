@@ -507,3 +507,15 @@ html[data-theme="dark"] .top-meta .ghost, html[data-theme="light"] .top-meta .gh
 .shown-row { display: flex; align-items: center; gap: var(--s2); }
 .count { padding: 0; }
 table { min-width: 900px; }
+.detail-tabs { display: flex; gap: 8px; flex-basis: 100%; }
+.drawer-head { flex-wrap: wrap; }
+.drawer-head > div { flex: 1; }
+.drawer.plan-view { width: min(1040px, 100%); }
+.plan-grid { grid-template-columns: 1fr 1fr; align-items: stretch; }
+.plan-view .drawer-body { gap: 16px; padding: 20px; }
+.plan-view .steps li { font-size: 12px; line-height: 1.45; padding-top: 10px; padding-bottom: 10px; }
+@media (max-width: 720px) {
+  .plan-grid { grid-template-columns: 1fr; }
+  .lede { grid-template-columns: 1fr; }
+}
+

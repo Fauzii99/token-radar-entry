@@ -20,6 +20,7 @@
     tag: 'all',
     sort: [{ key: 'rank', dir: 1 }],
     open: null,
+    detailTab: 'valuation',
     view: 'board',
     theme: 'dark',
   };
@@ -126,7 +127,7 @@
     return D.rows.filter(function (r) {
       if (state.category !== 'all' && (r.category || 'Uncategorised') !== state.category) return false;
       if (state.chain !== 'all' && r.chains.indexOf(state.chain) < 0) return false;
-      if (state.confidence !== 'all' && r.confidence !== state.confidence) return false;
+      if (state.confidence !== 'all' && CONF_ORDER[r.confidence] < CONF_ORDER[state.confidence]) return false;
       if (state.tag !== 'all' && r.value_tag !== state.tag) return false;
       if (terms.length === 0) return true;
       var h = haystack(r);
@@ -300,7 +301,9 @@
 
   function kpis() {
     var top = D.rows[0];
-    var median = D.rows[Math.floor(D.rows.length / 2)];
+    var medianValues = D.rows.map(function (row) { return row.implied_value_usd; }).sort(function (a, b) { return a - b; });
+    var middle = Math.floor(medianValues.length / 2);
+    var median = { implied_value_usd: medianValues.length % 2 ? medianValues[middle] : (medianValues[middle - 1] + medianValues[middle]) / 2 };
     var q = D.validation.ratio_quantiles;
     var items = [
       ['Top implied proxy', money(top.implied_value_usd), '#' + top.rank + ' ' + top.name + ' - band ' + money(top.band.p10) + ' to ' + money(top.band.p90)],
@@ -403,7 +406,7 @@
     }));
     var confOpts = [['all', 'All confidence'], ['higher', 'Higher only'], ['medium', 'Medium and up']];
     var tagOpts = [['all', 'All value tags']].concat(TAGS.map(function (t) { return [t, t]; }));
-    var search = el('input', { type: 'search', id: 'q', value: state.q, placeholder: 'Search protocol, chain, tag', 'aria-label': 'Search the board', oninput: function () { state.q = search.value; render(); } });
+    var search = el('input', { type: 'search', id: 'q', value: state.q, placeholder: 'Search board', 'aria-label': 'Search the board', oninput: function () { state.q = search.value; render(); } });
     var reset = el('button', { class: 'ghost', type: 'button', text: 'Reset filters', onclick: function () { state.q = ''; state.category = 'all'; state.chain = 'all'; state.confidence = 'all'; state.tag = 'all'; state.sort = [{ key: 'rank', dir: 1 }]; render(); } });
     var list = visible();
     return el('section', { class: 'controls', 'aria-label': 'Filters' },
@@ -499,7 +502,7 @@
   }
 
   // ---------------------------------------------------------------- drawer
-  function drawer() {
+  function valuationDrawer() {
     if (!state.open) return null;
     var r = null;
     for (var i = 0; i < D.rows.length; i++) if (D.rows[i].slug === state.open) r = D.rows[i];
@@ -545,10 +548,7 @@
     }));
     var compsBox = el('div', { class: 'comps-box' }, comps, compRows,
       el('p', { class: 'sub', text: 'This row\'s multiple is ' + mult(r.multiple) + ' of TVL. The peers are what the curve learned from; they are not comparables a buyer would accept.' }));
-    var steps = el('ol', { class: 'steps' }, r.farm_steps.map(function (s) {
-      var at = s.indexOf(' Assumed');
-      return el('li', null, el('span', { text: s }));
-    }));
+
     return el('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'false', 'aria-label': r.name + ' detail' },
       el('div', { class: 'drawer-head' },
         el('div', null,
@@ -575,10 +575,46 @@
           el('h3', { text: 'Nearest observed peers' }),
           el('p', { class: 'sub', text: 'Same category first, then by log-TVL distance. Their market cap is observed; this row\'s is not.' }),
           compsBox
-        ),
-        el('section', null, el('h3', { text: 'Farm plan' }), el('p', { class: 'sub', text: 'Capital tiers and gas are assumptions from the record\'s TVL and chain names, never live quotes. Nothing here promises an airdrop, points or eligibility, and no wallet is touched.' }), steps)
+        )
       )
     );
+  }
+
+  // Detail tabs keep the complete plan reachable without scrolling past every valuation section.
+  function drawer() {
+    var panel = valuationDrawer();
+    if (!panel) return null;
+    var row = D.rows.find(function (item) { return item.slug === state.open; });
+    var head = panel.querySelector('.drawer-head');
+    var body = panel.querySelector('.drawer-body');
+    var tabs = el('nav', { class: 'detail-tabs', 'aria-label': 'Detail sections' });
+    ['valuation', 'plan'].forEach(function (name) {
+      tabs.appendChild(el('button', {
+        type: 'button',
+        class: state.detailTab === name ? 'primary' : 'ghost',
+        'aria-pressed': String(state.detailTab === name),
+        text: name === 'plan' ? 'Farm plan · ' + row.farm_steps.length + ' steps' : 'Valuation & peers',
+        onclick: function () {
+          state.detailTab = name;
+          render();
+          document.querySelector('.detail-tabs button[aria-pressed="true"]').focus();
+        }
+      }));
+    });
+    head.appendChild(tabs);
+    if (state.detailTab === 'plan') {
+      panel.classList.add('plan-view');
+      body.textContent = '';
+      body.appendChild(el('section', { class: 'plan-summary' },
+        el('h3', { text: row.name + ' · research before funding' }),
+        el('p', { class: 'sub', text: 'Implied proxy ' + money(row.implied_value_usd) + ' · observed TVL ' + money(row.tvl_usd) + ' · ' + row.confidence + ' confidence' }),
+        el('p', { class: 'sub', text: 'All costs are assumptions. No observed token, eligibility or reward is established by this snapshot.' })
+      ));
+      body.appendChild(el('ol', { class: 'steps plan-grid' }, row.farm_steps.map(function (text) {
+        return el('li', null, el('span', { text: text }));
+      })));
+    }
+    return panel;
   }
 
   // ---------------------------------------------------------------- methodology
@@ -671,7 +707,7 @@
     window.scrollTo(0, scrollY);
   }
 
-  function openDrawer(slug) { state.open = slug; render(); }
+  function openDrawer(slug) { state.open = slug; state.detailTab = 'valuation'; render(); }
 
   applyTheme();
   render();
